@@ -1,16 +1,109 @@
 <template>
   <div class="map-container">
     <div ref="mapContainer" class="map-wrapper"></div>
+    <div class="style-switcher">
+      <button
+        v-for="style in mapStyles"
+        :key="style.id"
+        @click="switchStyle(style)"
+        :class="{ active: currentStyle === style.id }"
+      >
+        {{ style.name }}
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import { Amplify } from 'aws-amplify'
+import { Geo } from '@aws-amplify/geo'
+import { withIdentityPoolId } from '@aws/amazon-location-utilities-auth-helper'
+import outputs from '../amplify_outputs.json'
+
+Amplify.configure(outputs)
 
 const mapContainer = ref(null)
 const map = ref(null)
+const currentStyle = ref('amazon') // 初期スタイルをAmazonに変更
 
 const MAPTILER_KEY = 'ePRCzILSUpBa97QJmZwJ'
+const REGION = outputs.geo.aws_region
+const MAP_NAME = outputs.geo.maps.default
+const IDENTITY_POOL_ID = outputs.auth.identity_pool_id
+
+const mapStyles = [
+  {
+    id: 'amazon',
+    name: 'Amazon Location',
+    isAmazonStyle: true,
+    url: `https://maps.geo.${REGION}.amazonaws.com/maps/v0/maps/${MAP_NAME}/style-descriptor`
+  },
+  {
+    id: 'osm',
+    name: 'OpenStreetMap',
+    url: {
+      version: 8,
+      sources: {
+        'osm': {
+          type: 'raster',
+          tiles: [
+            'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+          ],
+          tileSize: 256,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }
+      },
+      layers: [
+        {
+          id: 'osm-tiles',
+          type: 'raster',
+          source: 'osm',
+          minzoom: 0,
+          maxzoom: 19
+        }
+      ]
+    }
+  },
+  {
+    id: 'maptiler',
+    name: 'MapTiler White',
+    url: `https://api.maptiler.com/maps/90b754d8-eb36-477e-bc28-337bc7bfaaf1/style.json?key=${MAPTILER_KEY}`
+  }
+]
+
+const switchStyle = async (style) => {
+  try {
+    if (map.value) {
+      const center = map.value.getCenter()
+      const zoom = map.value.getZoom()
+      const bearing = map.value.getBearing()
+      const pitch = map.value.getPitch()
+
+      if (style.isAmazonStyle) {
+        const authHelper = await withIdentityPoolId(IDENTITY_POOL_ID)
+        const newStyle = {
+          style: style.url,
+          ...authHelper.getMapAuthenticationOptions()
+        }
+        map.value.setStyle(newStyle.style, newStyle)
+      } else {
+        map.value.setStyle(style.url)
+      }
+
+      currentStyle.value = style.id
+
+      map.value.once('style.load', () => {
+        map.value.setCenter(center)
+        map.value.setZoom(zoom)
+        map.value.setBearing(bearing)
+        map.value.setPitch(pitch)
+      })
+    }
+  } catch (error) {
+    console.error('Style switch error:', error)
+  }
+}
 
 onMounted(async () => {
   if (process.client) {
@@ -18,17 +111,19 @@ onMounted(async () => {
     import('maplibre-gl/dist/maplibre-gl.css')
 
     if (mapContainer.value) {
-      map.value = new maplibregl.default.Map({
-        container: mapContainer.value,
-        style: `https://api.maptiler.com/maps/90b754d8-eb36-477e-bc28-337bc7bfaaf1/style.json?key=ePRCzILSUpBa97QJmZwJ`,
-        center: [139.7670, 35.6814], // 東京
-        zoom: 1
-      })
+      const authHelper = await withIdentityPoolId(IDENTITY_POOL_ID)
+      const initialStyle = mapStyles[0] // Amazon Location Serviceを初期スタイルに
 
-      map.value.addControl(
-        new maplibregl.default.NavigationControl()
-      )
-      
+      const mapOptions = {
+        container: mapContainer.value,
+        center: [139.7670, 35.6814],
+        zoom: 2,
+        style: initialStyle.url,
+        ...authHelper.getMapAuthenticationOptions()
+      }
+
+      map.value = new maplibregl.default.Map(mapOptions)
+
       map.value.addControl(
         new maplibregl.default.ScaleControl({
           maxWidth: 100,
@@ -44,10 +139,42 @@ onMounted(async () => {
 .map-container {
   width: 100%;
   height: 100vh;
+  position: relative;
 }
 
 .map-wrapper {
   width: 100%;
   height: 100%;
+}
+
+.style-switcher {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: white;
+  padding: 10px;
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  z-index: 1;
+}
+
+.style-switcher button {
+  display: block;
+  margin: 5px 0;
+  padding: 8px 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  width: 100%;
+}
+
+.style-switcher button.active {
+  background: #eee;
+  font-weight: bold;
+}
+
+.style-switcher button:hover {
+  background: #f5f5f5;
 }
 </style>

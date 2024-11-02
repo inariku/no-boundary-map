@@ -10,6 +10,8 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@aws-amplify/geo": "^3.0.56",
+    "@aws/amazon-location-utilities-auth-helper": "^1.1.0",
     "aws-amplify": "^6.8.0",
     "maplibre-gl": "^4.7.1",
     "nuxt": "^3.13.2",
