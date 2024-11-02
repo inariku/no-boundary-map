@@ -38,7 +38,7 @@ const map = ref(null)
 const currentStyle = ref('amazon') // 初期スタイルをAmazonに変更
 const bordersHidden = ref(false) // 国境線の表示状態を管理
 
-const MAPTILER_KEY = 'ePRCzILSUpBa97QJmZwJ'
+const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY
 const REGION = outputs.geo.aws_region
 const MAP_NAME = outputs.geo.maps.default
 const IDENTITY_POOL_ID = outputs.auth.identity_pool_id
