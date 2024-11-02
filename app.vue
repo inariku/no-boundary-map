@@ -10,6 +10,16 @@
       >
         {{ style.name }}
       </button>
+      
+      <!-- Amazon Location Service選択時のみ表示される国境線切り替えボタン -->
+      <div v-if="currentStyle === 'amazon'" class="border-toggle">
+        <button
+          @click="toggleBorders"
+          :class="{ active: !bordersHidden }"
+        >
+          {{ bordersHidden ? '国境線を表示' : '国境線を非表示' }}
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -26,6 +36,7 @@ Amplify.configure(outputs)
 const mapContainer = ref(null)
 const map = ref(null)
 const currentStyle = ref('amazon') // 初期スタイルをAmazonに変更
+const bordersHidden = ref(false) // 国境線の表示状態を管理
 
 const MAPTILER_KEY = 'ePRCzILSUpBa97QJmZwJ'
 const REGION = outputs.geo.aws_region
@@ -72,6 +83,27 @@ const mapStyles = [
   }
 ]
 
+// 国境線の表示/非表示を切り替える関数
+const toggleBorders = () => {
+  if (map.value) {
+    const layers = map.value.getStyle().layers
+    layers.forEach(layer => {
+      if (
+        layer.id.includes('border') || 
+        layer.id.includes('boundary') ||
+        layer.id.includes('admin')
+      ) {
+        map.value.setLayoutProperty(
+          layer.id,
+          'visibility',
+          bordersHidden.value ? 'visible' : 'none'
+        )
+      }
+    })
+    bordersHidden.value = !bordersHidden.value
+  }
+}
+
 const switchStyle = async (style) => {
   try {
     if (map.value) {
@@ -87,18 +119,37 @@ const switchStyle = async (style) => {
           ...authHelper.getMapAuthenticationOptions()
         }
         map.value.setStyle(newStyle.style, newStyle)
+        
+        // Amazon スタイルに切り替えた時、以前の国境線表示状態を適用
+        map.value.once('style.load', () => {
+          if (bordersHidden.value) {
+            const layers = map.value.getStyle().layers
+            layers.forEach(layer => {
+              if (
+                layer.id.includes('border') || 
+                layer.id.includes('boundary') ||
+                layer.id.includes('admin')
+              ) {
+                map.value.setLayoutProperty(layer.id, 'visibility', 'none')
+              }
+            })
+          }
+          map.value.setCenter(center)
+          map.value.setZoom(zoom)
+          map.value.setBearing(bearing)
+          map.value.setPitch(pitch)
+        })
       } else {
         map.value.setStyle(style.url)
+        map.value.once('style.load', () => {
+          map.value.setCenter(center)
+          map.value.setZoom(zoom)
+          map.value.setBearing(bearing)
+          map.value.setPitch(pitch)
+        })
       }
 
       currentStyle.value = style.id
-
-      map.value.once('style.load', () => {
-        map.value.setCenter(center)
-        map.value.setZoom(zoom)
-        map.value.setBearing(bearing)
-        map.value.setPitch(pitch)
-      })
     }
   } catch (error) {
     console.error('Style switch error:', error)
@@ -176,5 +227,30 @@ onMounted(async () => {
 
 .style-switcher button:hover {
   background: #f5f5f5;
+}
+
+/* 国境線切り替えボタンのスタイル */
+.border-toggle {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #ccc;
+}
+
+.border-toggle button {
+  width: 100%;
+  padding: 8px 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+}
+
+.border-toggle button:hover {
+  background: #f5f5f5;
+}
+
+.border-toggle button.active {
+  background: #eee;
+  font-weight: bold;
 }
 </style>
